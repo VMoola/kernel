@@ -290,6 +290,13 @@ static int mqprio_parse_nlattr(struct Qdisc *sch, struct tc_mqprio_qopt *qopt,
 						    "Attribute type expected to be TCA_MQPRIO_MIN_RATE64");
 				return -EINVAL;
 			}
+
+			if (nla_len(attr) != sizeof(u64)) {
+				NL_SET_ERR_MSG_ATTR(extack, attr,
+						    "Attribute TCA_MQPRIO_MIN_RATE64 expected to have 8 bytes length");
+				return -EINVAL;
+			}
+
 			if (i >= qopt->num_tc)
 				break;
 			priv->min_rate[i] = nla_get_u64(attr);
@@ -312,6 +319,13 @@ static int mqprio_parse_nlattr(struct Qdisc *sch, struct tc_mqprio_qopt *qopt,
 						    "Attribute type expected to be TCA_MQPRIO_MAX_RATE64");
 				return -EINVAL;
 			}
+
+			if (nla_len(attr) != sizeof(u64)) {
+				NL_SET_ERR_MSG_ATTR(extack, attr,
+						    "Attribute TCA_MQPRIO_MAX_RATE64 expected to have 8 bytes length");
+				return -EINVAL;
+			}
+
 			if (i >= qopt->num_tc)
 				break;
 			priv->max_rate[i] = nla_get_u64(attr);
@@ -557,7 +571,7 @@ static int mqprio_dump(struct Qdisc *sch, struct sk_buff *skb)
 	 * qdisc totals are added at end.
 	 */
 	for (ntx = 0; ntx < dev->num_tx_queues; ntx++) {
-		qdisc = netdev_get_tx_queue(dev, ntx)->qdisc_sleeping;
+		qdisc = rtnl_dereference(netdev_get_tx_queue(dev, ntx)->qdisc_sleeping);
 		spin_lock_bh(qdisc_lock(qdisc));
 
 		gnet_stats_add_basic(&sch->bstats, qdisc->cpu_bstats,
@@ -604,7 +618,7 @@ static struct Qdisc *mqprio_leaf(struct Qdisc *sch, unsigned long cl)
 	if (!dev_queue)
 		return NULL;
 
-	return dev_queue->qdisc_sleeping;
+	return rtnl_dereference(dev_queue->qdisc_sleeping);
 }
 
 static unsigned long mqprio_find(struct Qdisc *sch, u32 classid)
@@ -637,7 +651,7 @@ static int mqprio_dump_class(struct Qdisc *sch, unsigned long cl,
 		tcm->tcm_parent = (tc < 0) ? 0 :
 			TC_H_MAKE(TC_H_MAJ(sch->handle),
 				  TC_H_MIN(tc + TC_H_MIN_PRIORITY));
-		tcm->tcm_info = dev_queue->qdisc_sleeping->handle;
+		tcm->tcm_info = rtnl_dereference(dev_queue->qdisc_sleeping)->handle;
 	} else {
 		tcm->tcm_parent = TC_H_ROOT;
 		tcm->tcm_info = 0;
@@ -693,7 +707,7 @@ static int mqprio_dump_class_stats(struct Qdisc *sch, unsigned long cl,
 	} else {
 		struct netdev_queue *dev_queue = mqprio_queue_get(sch, cl);
 
-		sch = dev_queue->qdisc_sleeping;
+		sch = rtnl_dereference(dev_queue->qdisc_sleeping);
 		if (gnet_stats_copy_basic(d, sch->cpu_bstats,
 					  &sch->bstats, true) < 0 ||
 		    qdisc_qstats_copy(d, sch) < 0)
