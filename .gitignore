@@ -171,7 +171,3 @@ sphinx_*/
 
 # Rust analyzer configuration
 /rust-project.json
-
-# Personal files
-/tmp
-/compiled/

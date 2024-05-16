@@ -657,7 +657,10 @@ int dup_userfaultfd(struct vm_area_struct *vma, struct list_head *fcs)
 	struct userfaultfd_fork_ctx *fctx;
 
 	octx = vma->vm_userfaultfd_ctx.ctx;
-	if (!octx || !(octx->features & UFFD_FEATURE_EVENT_FORK)) {
+	if (!octx)
+		return 0;
+
+	if (!(octx->features & UFFD_FEATURE_EVENT_FORK)) {
 		vma_start_write(vma);
 		vma->vm_userfaultfd_ctx = NULL_VM_UFFD_CTX;
 		userfaultfd_set_vm_flags(vma, vma->vm_flags & ~__VM_UFFD_FLAGS);
@@ -895,6 +898,10 @@ static int userfaultfd_release(struct inode *inode, struct file *file)
 			prev = vma;
 			continue;
 		}
+		/* Reset ptes for the whole vma range if wr-protected */
+		if (userfaultfd_wp(vma))
+			uffd_wp_range(vma, vma->vm_start,
+				      vma->vm_end - vma->vm_start, false);
 		new_flags = vma->vm_flags & ~__VM_UFFD_FLAGS;
 		vma = vma_modify_flags_uffd(&vmi, prev, vma, vma->vm_start,
 					    vma->vm_end, new_flags,
