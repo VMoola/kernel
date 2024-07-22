@@ -113,7 +113,7 @@ static vm_fault_t fb_deferred_io_fault(struct vm_fault *vmf)
 		printk(KERN_ERR "no mapping available\n");
 
 	BUG_ON(!page->mapping);
-	page->index = vmf->pgoff; /* for page_mkclean() */
+	page->index = vmf->pgoff; /* for folio_mkclean() */
 
 	vmf->page = page;
 	return 0;
@@ -161,7 +161,7 @@ static vm_fault_t fb_deferred_io_track_page(struct fb_info *info, unsigned long 
 
 	/*
 	 * We want the page to remain locked from ->page_mkwrite until
-	 * the PTE is marked dirty to avoid page_mkclean() being called
+	 * the PTE is marked dirty to avoid folio_mkclean() being called
 	 * before the PTE is updated, which would leave the page ignored
 	 * by defio.
 	 * Do this by locking the page here and informing the caller
@@ -196,7 +196,7 @@ err_mutex_unlock:
  */
 static vm_fault_t fb_deferred_io_page_mkwrite(struct fb_info *info, struct vm_fault *vmf)
 {
-	unsigned long offset = vmf->address - vmf->vma->vm_start;
+	unsigned long offset = vmf->pgoff << PAGE_SHIFT;
 	struct page *page = vmf->page;
 
 	file_update_time(vmf->vma->vm_file);
@@ -244,10 +244,11 @@ static void fb_deferred_io_work(struct work_struct *work)
 	/* here we mkclean the pages, then do all deferred IO */
 	mutex_lock(&fbdefio->lock);
 	list_for_each_entry(pageref, &fbdefio->pagereflist, list) {
-		struct page *cur = pageref->page;
-		lock_page(cur);
-		page_mkclean(cur);
-		unlock_page(cur);
+		struct folio *folio = page_folio(pageref->page);
+
+		folio_lock(folio);
+		folio_mkclean(folio);
+		folio_unlock(folio);
 	}
 
 	/* driver's callback with pagereflist */

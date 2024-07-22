@@ -11,6 +11,7 @@
 #include <linux/preempt.h>
 #include <asm/percpu.h>
 #include <linux/cpumask.h>
+#include <linux/smp.h>
 #include <linux/static_key.h>
 #include <linux/irqflags.h>
 
@@ -121,7 +122,7 @@ static inline void alloc_tag_add_check(union codetag_ref *ref, struct alloc_tag 
 		  "alloc_tag was not cleared (got tag for %s:%u)\n",
 		  ref->ct->filename, ref->ct->lineno);
 
-	WARN_ONCE(!tag, "current->alloc_tag not set");
+	WARN_ONCE(!tag, "current->alloc_tag not set\n");
 }
 
 static inline void alloc_tag_sub_check(union codetag_ref *ref)
