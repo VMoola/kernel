@@ -4301,15 +4301,6 @@ static bool sort_folio(struct lruvec *lruvec, struct folio *folio, struct scan_c
 		return true;
 	}
 
-	/* dirty lazyfree */
-	if (type == LRU_GEN_FILE && folio_test_anon(folio) && folio_test_dirty(folio)) {
-		success = lru_gen_del_folio(lruvec, folio, true);
-		VM_WARN_ON_ONCE_FOLIO(!success, folio);
-		folio_set_swapbacked(folio);
-		lruvec_add_folio_tail(lruvec, folio);
-		return true;
-	}
-
 	/* promoted */
 	if (gen != lru_gen_from_seq(lrugen->min_seq[type])) {
 		list_move(&folio->lru, &lrugen->folios[gen][type][zone]);
@@ -5933,43 +5924,11 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 	} while ((memcg = mem_cgroup_iter(target_memcg, memcg, partial)));
 }
 
-#ifdef CONFIG_UNACCEPTED_MEMORY
-static bool node_try_to_accept_memory(pg_data_t *pgdat, struct scan_control *sc)
-{
-	bool progress = false;
-	struct zone *zone;
-	int z;
-
-	for (z = 0; z <= sc->reclaim_idx; z++) {
-		zone = pgdat->node_zones + z;
-		if (!managed_zone(zone))
-			continue;
-
-		if (try_to_accept_memory(zone, sc->order))
-			progress = true;
-	}
-
-	return progress;
-}
-#else
-static inline bool node_try_to_accept_memory(pg_data_t *pgdat,
-					     struct scan_control *sc)
-{
-	return false;
-}
-#endif /* CONFIG_UNACCEPTED_MEMORY */
-
 static void shrink_node(pg_data_t *pgdat, struct scan_control *sc)
 {
 	unsigned long nr_reclaimed, nr_scanned, nr_node_reclaimed;
 	struct lruvec *target_lruvec;
 	bool reclaimable = false;
-
-	/* Try to accept memory before going for reclaim */
-	if (node_try_to_accept_memory(pgdat, sc)) {
-		if (!should_continue_reclaim(pgdat, 0, sc))
-			return;
-	}
 
 	if (lru_gen_enabled() && root_reclaim(sc)) {
 		lru_gen_shrink_node(pgdat, sc);
@@ -6181,10 +6140,6 @@ static void shrink_zones(struct zonelist *zonelist, struct scan_control *sc)
 		if (!cgroup_reclaim(sc)) {
 			if (!cpuset_zone_allowed(zone,
 						 GFP_KERNEL | __GFP_HARDWALL))
-				continue;
-
-			/* Try to accept memory before going for reclaim */
-			if (try_to_accept_memory(zone, sc->order))
 				continue;
 
 			/*
